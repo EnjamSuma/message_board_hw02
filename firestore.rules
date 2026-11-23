@@ -1,0 +1,91 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{uid} {
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'firstName',
+          'lastName',
+          'role',
+          'registrationDateTime'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'firstName',
+          'lastName',
+          'role',
+          'registrationDateTime'
+        ])
+        && request.resource.data.role == 'user'
+        && request.resource.data.firstName is string
+        && request.resource.data.lastName is string
+        && request.resource.data.registrationDateTime
+            == request.time;
+
+      allow read: if request.auth != null
+        && request.auth.uid == uid;
+
+      allow update, delete: if false;
+    }
+
+    
+match /messages/{msgId} {
+  function signedIn() {
+    return request.auth != null;
+  }
+
+  function validMessage() {
+    let d = request.resource.data;
+
+    return d.keys().hasAll([
+      'text', 'authorUid', 'authorName',
+      'createdAt', 'editedAt', 'schemaVersion'
+    ])
+    && d.keys().hasOnly([
+      'text', 'authorUid', 'authorName',
+      'createdAt', 'editedAt', 'schemaVersion'
+    ])
+    && d.text is string
+    && d.text.size() > 0
+    && d.text.size() <= 1000
+    && d.authorUid == request.auth.uid
+    && d.authorName is string
+    && d.authorName.size() > 0
+    && d.createdAt == request.time
+    && d.editedAt == null
+    && d.schemaVersion == 2;
+  }
+
+  allow read: if signedIn();
+
+  allow create: if signedIn() && validMessage();
+
+  allow update: if signedIn()
+    && resource.data.authorUid == request.auth.uid
+    && request.resource.data.authorUid ==
+       resource.data.authorUid
+    && request.resource.data.authorName ==
+       resource.data.authorName
+    && request.resource.data.createdAt ==
+       resource.data.createdAt
+    && request.resource.data.schemaVersion ==
+       resource.data.schemaVersion
+    && request.resource.data.diff(resource.data)
+       .affectedKeys().hasOnly(['text', 'editedAt'])
+    && request.resource.data.text is string
+    && request.resource.data.text.size() > 0
+    && request.resource.data.text.size() <= 1000
+    && request.resource.data.editedAt == request.time;
+
+  allow delete: if signedIn()
+    && resource.data.authorUid == request.auth.uid;
+}
+
+  }
+}
